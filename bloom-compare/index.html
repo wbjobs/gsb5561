@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>布隆过滤器对比工具</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --dim:#8b949e; --accent:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:24px; background:var(--bg); color:var(--fg);
+         font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--dim); margin-bottom:20px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+  label { display:block; color:var(--dim); font-size:12px; margin-bottom:4px; }
+  input { width:100%; padding:6px 8px; background:#0d1117; border:1px solid var(--border);
+          border-radius:6px; color:var(--fg); font-size:14px; }
+  input:focus { outline:none; border-color:var(--accent); }
+  .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  button { padding:7px 14px; border:1px solid var(--border); border-radius:6px; background:#21262d;
+           color:var(--fg); cursor:pointer; font-size:14px; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary { background:#1f6feb; border-color:#1f6feb; }
+  .hint { color:var(--dim); font-size:12px; margin-top:10px; }
+  .hint b { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:6px 10px; border-bottom:1px solid var(--border); text-align:right; }
+  th:first-child, td:first-child { text-align:left; color:var(--dim); }
+  th { color:var(--accent); }
+  .canvases { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:800px){ .canvases{grid-template-columns:1fr;} }
+  canvas { width:100%; height:160px; border:1px solid var(--border); border-radius:6px; display:block; }
+  .cap { font-size:12px; color:var(--dim); margin:6px 0 0; }
+  .bar { height:6px; background:#21262d; border-radius:3px; overflow:hidden; margin-top:4px; }
+  .bar > div { height:100%; width:0%; background:var(--accent); transition:width .3s; }
+  #progressBar { background:#3fb950; }
+  .status-row { display:flex; align-items:center; gap:12px; margin-top:12px; }
+  #status { color:var(--dim); font-size:13px; min-width:200px; }
+  #log { max-height:180px; overflow-y:auto; font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .log-line { padding:2px 0; border-bottom:1px dashed #21262d; }
+  .log-line.ok { color:#3fb950; }
+  .log-line.err { color:#f85149; }
+</style>
+</head>
+<body>
+<h1>布隆过滤器对比工具</h1>
+<div class="sub">普通布隆过滤器 vs 计数布隆过滤器 · Web Worker + TypedArray + Canvas + Web Crypto</div>
+
+<div class="panel">
+  <div class="grid">
+    <div><label>位数组大小 m（bit）</label><input id="cfgM" type="number" value="8388608" min="1024" step="1024"></div>
+    <div><label>哈希函数个数 k</label><input id="cfgK" type="number" value="4" min="1" max="32"></div>
+    <div><label>插入数量 n</label><input id="cfgN" type="number" value="1000000" min="1"></div>
+    <div><label>误判率测试查询数</label><input id="cfgProbe" type="number" value="200000" min="1000"></div>
+    <div><label>删除数量（仅计数布隆）</label><input id="cfgDel" type="number" value="100000" min="1"></div>
+  </div>
+  <div class="btns">
+    <button id="btnInit" class="primary">初始化 / 应用配置</button>
+    <button id="btnInsert">插入 n 条</button>
+    <button id="btnFpTest">误判率测试</button>
+    <button id="btnDelete">删除（计数布隆）</button>
+    <button id="btnBench">一键对比基准</button>
+    <button id="btnReset">重置</button>
+    <button id="btnCancel" disabled>取消</button>
+  </div>
+  <div class="hint">
+    理论误判率（当前配置）：<b id="theoryFpr">-</b> ｜ 建议最优 k：<b id="optimalK">-</b> ｜
+    空间占用：普通 <b id="spaceClassic">-</b> vs 计数 <b id="spaceCounting">-</b>
+  </div>
+  <div class="status-row">
+    <div id="status">空闲</div>
+    <div class="bar" style="flex:1"><div id="progressBar"></div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <table>
+    <tr><th>指标</th><th>普通布隆过滤器</th><th>计数布隆过滤器</th></tr>
+    <tr><td>已插入元素数</td><td id="stClassicCount">0</td><td id="stCountingCount">0</td></tr>
+    <tr><td>位数组填充率</td><td id="stClassicFill">-</td><td id="stCountingFill">-</td></tr>
+    <tr><td>空间占用</td><td id="stClassicMem">-</td><td id="stCountingMem">-</td></tr>
+    <tr><td>实测误判率</td><td id="stClassicFpr">-</td><td id="stCountingFpr">-</td></tr>
+    <tr><td>理论误判率（两者相同）</td><td colspan="2" id="stTheoryFpr">-</td></tr>
+    <tr><td>插入吞吐</td><td id="stClassicInsert">-</td><td id="stCountingInsert">-</td></tr>
+    <tr><td>查询吞吐</td><td id="stClassicQuery">-</td><td id="stCountingQuery">-</td></tr>
+    <tr><td>计数溢出次数（饱和保护）</td><td>-</td><td id="stOverflow">0</td></tr>
+  </table>
+</div>
+
+<div class="panel">
+  <div class="canvases">
+    <div>
+      <canvas id="canvasClassic" width="640" height="320"></canvas>
+      <div class="cap">普通布隆过滤器 · 位填充热力图（越亮 = 该区块置位比例越高）</div>
+      <div class="bar"><div id="fillBarClassic"></div></div>
+    </div>
+    <div>
+      <canvas id="canvasCounting" width="640" height="320"></canvas>
+      <div class="cap">计数布隆过滤器 · 计数热力图（绿→黄→红 = 平均计数 0→4+）</div>
+      <div class="bar"><div id="fillBarCounting"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div id="log"></div>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>
