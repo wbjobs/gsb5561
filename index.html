@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>布隆过滤器对比工具 — 标准 vs 计数</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>布隆过滤器对比工具</h1>
+    <p class="sub">标准布隆过滤器 vs 计数布隆过滤器 · Web Worker + TypedArray + Canvas + Web Crypto</p>
+  </header>
+
+  <main>
+    <!-- 配置区 -->
+    <section class="card">
+      <h2>配置</h2>
+      <div class="cfg-grid">
+        <label>位数组大小 m (bits)
+          <input id="cfg-m" type="number" min="8" step="1000" value="10000000">
+        </label>
+        <label>哈希函数个数 k
+          <input id="cfg-k" type="number" min="1" max="64" value="7">
+        </label>
+        <label>插入 / 查询 / 删除数量 n
+          <input id="cfg-n" type="number" min="1" step="1000" value="1000000">
+        </label>
+      </div>
+      <p id="optimal-hint" class="hint"></p>
+      <div class="btn-row">
+        <button id="btn-init">初始化 / 应用配置</button>
+        <button id="btn-insert" class="primary">插入 n 条</button>
+        <button id="btn-query" class="primary">查询 n 条（测误判率）</button>
+        <button id="btn-delete" class="warn">删除 n 条（仅计数）</button>
+        <button id="btn-reset" class="danger">重置</button>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress"><div id="progress-bar"></div></div>
+        <span id="progress-text"></span>
+      </div>
+      <p>状态：<span id="status">就绪</span> · <span id="cfg-info"></span></p>
+    </section>
+
+    <!-- 可视化 -->
+    <section class="card">
+      <h2>位数组填充率可视化</h2>
+      <div class="viz-row">
+        <h3>标准布隆过滤器 <span id="std-fill-text" class="fill-text">0</span></h3>
+        <canvas id="std-canvas" width="960" height="48"></canvas>
+        <div class="fill-bar"><div id="std-fill-bar"></div></div>
+      </div>
+      <div class="viz-row">
+        <h3>计数布隆过滤器 <span id="cnt-fill-text" class="fill-text">0</span></h3>
+        <canvas id="cnt-canvas" width="960" height="48"></canvas>
+        <div class="fill-bar"><div id="cnt-fill-bar"></div></div>
+      </div>
+      <p class="hint">色带：蓝 = 空位，绿 = 部分填充，红 = 填满。每列聚合一段位数组的填充密度。</p>
+    </section>
+
+    <!-- 对比统计 -->
+    <section class="card">
+      <h2>量化对比</h2>
+      <table>
+        <thead>
+          <tr><th>指标</th><th>标准布隆过滤器</th><th>计数布隆过滤器</th></tr>
+        </thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </section>
+
+    <!-- 日志 -->
+    <section class="card">
+      <h2>运行日志</h2>
+      <div id="log" class="log"></div>
+    </section>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
